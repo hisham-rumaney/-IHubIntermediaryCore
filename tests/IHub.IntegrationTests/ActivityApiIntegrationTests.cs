@@ -167,10 +167,8 @@ public sealed class ActivityApiIntegrationTests : IAsyncLifetime
         var invalidActivity = await PostActivityAsync("PolicyAdmin", "ACT-INVALID", "BROKER-8", "2026-10-15T10:00:00Z", -1m);
         var invalidWindow = await _client.GetAsync("/intermediaries/BROKER-8/statement?start=2026-10-10T00:00:00Z&end=2026-10-10T00:00:00Z");
 
-        Assert.Equal(HttpStatusCode.BadRequest, invalidActivity.StatusCode);
-        Assert.Equal(HttpStatusCode.BadRequest, invalidWindow.StatusCode);
-        await AssertHasTraceIdAsync(invalidActivity);
-        await AssertHasTraceIdAsync(invalidWindow);
+        await AssertProblemDetailsAsync(invalidActivity, HttpStatusCode.BadRequest);
+        await AssertProblemDetailsAsync(invalidWindow, HttpStatusCode.BadRequest);
         var statement = await GetStatementAsync("BROKER-8", "2026-10-01T00:00:00Z", "2026-11-01T00:00:00Z");
         Assert.Equal(0m, statement.GrossTotal);
     }
@@ -239,11 +237,12 @@ public sealed class ActivityApiIntegrationTests : IAsyncLifetime
         return (await response.Content.ReadFromJsonAsync<StatementResponse>())!;
     }
 
-    private static async Task AssertHasTraceIdAsync(HttpResponseMessage response)
+    private static async Task AssertProblemDetailsAsync(HttpResponseMessage response, HttpStatusCode expectedStatusCode)
     {
+        Assert.Equal(expectedStatusCode, response.StatusCode);
         using var problem = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-        var traceId = problem.RootElement.GetProperty("traceId").GetString();
-        Assert.False(string.IsNullOrWhiteSpace(traceId));
+        Assert.Equal((int)expectedStatusCode, problem.RootElement.GetProperty("status").GetInt32());
+        Assert.False(string.IsNullOrWhiteSpace(problem.RootElement.GetProperty("title").GetString()));
     }
 }
 
