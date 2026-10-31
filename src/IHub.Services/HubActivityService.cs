@@ -72,7 +72,10 @@ public sealed class HubActivityService(
             return (false, MapResponse(existing));
         }
 
-        await intermediaryRepository.EnsureExistsAsync(intermediaryId, cancellationToken);
+        if (!await intermediaryRepository.ExistsAsync(intermediaryId, cancellationToken))
+        {
+            throw new IntermediaryNotFoundException(intermediaryId);
+        }
 
         var activity = new Activity
         {

@@ -2,20 +2,37 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using IHub.Application.DTOs;
+using IHub.Data.Persistence;
+using IHub.Domain.Entities;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace IHub.IntegrationTests;
 
 public sealed class ActivityApiIntegrationTests : IAsyncLifetime
 {
+    private static readonly string[] ExistingIntermediaryIds =
+    [
+        "BROKER-1", "BROKER-2", "BROKER-3", "BROKER-4", "BROKER-5", "BROKER-6",
+        "BROKER-7", "BROKER-8", "BROKER-9", "BROKER-10", "BROKER-UTC", "BROKER-METRICS"
+    ];
+
     private readonly CustomWebApplicationFactory _factory = new();
     private HttpClient _client = null!;
 
-    public Task InitializeAsync()
+    public async Task InitializeAsync()
     {
         _client = _factory.CreateClient();
-        return Task.CompletedTask;
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<IHubDbContext>();
+        dbContext.Intermediaries.AddRange(ExistingIntermediaryIds.Select(intermediaryId => new Intermediary
+        {
+            IntermediaryId = intermediaryId,
+            CreatedAtUtc = DateTimeOffset.UtcNow
+        }));
+        await dbContext.SaveChangesAsync();
     }
 
     public async Task DisposeAsync()
@@ -120,6 +137,19 @@ public sealed class ActivityApiIntegrationTests : IAsyncLifetime
         var statement = await GetStatementAsync("BROKER-7", "2026-10-01T00:00:00Z", "2026-11-01T00:00:00Z");
         Assert.Equal(10m, statement.GrossTotal);
         Assert.Equal("ZAR", statement.Currency);
+    }
+
+    [Fact]
+    public async Task UnknownIntermediary_IsNotCreatedOrIngested()
+    {
+        const string intermediaryId = "BROKER-UNKNOWN";
+        var response = await PostActivityAsync("PolicyAdmin", "ACT-UNKNOWN-INTERMEDIARY", intermediaryId, "2026-10-15T10:00:00Z", 10m);
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<IHubDbContext>();
+        Assert.False(await dbContext.Intermediaries.AnyAsync(x => x.IntermediaryId == intermediaryId));
+        Assert.False(await dbContext.Activities.AnyAsync(x => x.ExternalActivityId == "ACT-UNKNOWN-INTERMEDIARY"));
     }
 
     [Fact]

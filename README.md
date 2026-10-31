@@ -62,7 +62,7 @@ For shared or production environments, use a secret manager and not shell histor
 
 ## Reset the Local Database and Run
 
-The repository contains one fresh `InitialCreate` migration for the current model. To discard an existing local `ihub` database and start fresh, stop the API first, then run:
+The repository contains an `InitialCreate` migration and a `SeedSampleData` migration. To discard an existing local `ihub` database and start fresh, stop the API first, then run:
 
 ```sh
 dropdb --if-exists ihub
@@ -80,6 +80,24 @@ dotnet run --project src/IHub.Api/IHub.Api.csproj
 
 The HTTP launch profile listens on `http://localhost:5204`. If the database cannot be reached, ensure PostgreSQL is running before launching the API. Dropping the database deletes all its data; use this reset only for the disposable local database, never shared or production data.
 
+## Seeded Sample Data
+
+`SeedSampleData` inserts these existing intermediary IDs and activities:
+
+| Intermediary ID | Source system | External activity ID | Occurred at (UTC) | Amount |
+| --- | --- | --- | --- | ---: |
+| `BROKER-123` | `SAMPLE` | `SAMPLE-0001` | 2026-10-15 10:30 | 1250.50 ZAR |
+| `BROKER-123` | `SAMPLE` | `SAMPLE-0002` | 2026-10-20 09:00 | 250.00 ZAR |
+| `BROKER-456` | `SAMPLE` | `SAMPLE-0003` | 2026-10-18 16:00 | 875.25 ZAR |
+
+`BROKER-TEST` is also seeded with no activities and is used in the POST example below. Query the seeded October total for `BROKER-123` with:
+
+```sh
+curl -i 'http://localhost:5204/intermediaries/BROKER-123/statement?start=2026-10-01T00:00:00Z&end=2026-11-01T00:00:00Z'
+```
+
+The expected gross total is `1500.50` ZAR.
+
 ## API
 
 There are exactly two business endpoints.
@@ -94,7 +112,7 @@ curl -i http://localhost:5204/activities \
   -d '{
     "sourceSystem": "PolicyAdministration",
     "externalActivityId": "ACT-10001",
-    "intermediaryId": "BROKER-123",
+    "intermediaryId": "BROKER-TEST",
     "occurredAt": "2026-10-15T10:30:00Z",
     "amount": 1250.50
   }'
@@ -102,11 +120,14 @@ curl -i http://localhost:5204/activities \
 
 `sourceSystem` is trimmed and canonicalized to uppercase. It must be at most 50 characters and contain letters, digits, dots, underscores or hyphens. `externalActivityId` is preserved, including case, and is limited to 200 characters. Currency is not accepted in the request; the application assigns `ZAR`. Amount must be positive and fit `NUMERIC(18,2)`.
 
+The intermediary must already exist in the intermediary management system. This API does not create or manage intermediary records.
+
 Responses:
 
 - `201 Created`: new activity persisted.
 - `200 OK`: identical submission for the same `(sourceSystem, externalActivityId)`.
 - `409 Conflict`: conflicting payload for that identity.
+- `404 Not Found`: the intermediary does not exist; no activity is ingested.
 - `400 Bad Request`: invalid activity.
 
 The response contains the canonical `sourceSystem`, external ID, intermediary, occurrence timestamp, amount, `ZAR` currency and ingestion timestamp.
@@ -116,14 +137,14 @@ The response contains the canonical `sourceSystem`, external ID, intermediary, o
 `GET /intermediaries/{intermediaryId}/statement?start=...&end=...`
 
 ```sh
-curl -i 'http://localhost:5204/intermediaries/BROKER-123/statement?start=2026-10-01T00:00:00Z&end=2026-11-01T00:00:00Z'
+curl -i 'http://localhost:5204/intermediaries/BROKER-TEST/statement?start=2026-10-01T00:00:00Z&end=2026-11-01T00:00:00Z'
 ```
 
 Example response:
 
 ```json
 {
-  "intermediaryId": "BROKER-123",
+  "intermediaryId": "BROKER-TEST",
   "currency": "ZAR",
   "start": "2026-10-01T00:00:00+00:00",
   "end": "2026-11-01T00:00:00+00:00",
@@ -147,9 +168,9 @@ Run all tests from the repository root:
 dotnet test IHub.sln --nologo
 ```
 
-The `WebApplicationFactory` replaces the app's EF context with a uniquely named InMemory database for each test. No PostgreSQL server or Docker is used. The HTTP tests cover ingestion without a currency field, ZAR statement responses, source-scoped duplicates, conflicts, out-of-order events, window boundaries, invalid requests, concurrent request handling and the health endpoint.
+The `WebApplicationFactory` replaces the app's EF context with a uniquely named InMemory database for each test. No PostgreSQL server or Docker is used. The tests seed existing intermediaries and cover unknown-intermediary rejection, ingestion without a currency field, ZAR statement responses, source-scoped duplicates, conflicts, out-of-order events, window boundaries, invalid requests, concurrent request handling and the health endpoint.
 
-EF Core InMemory is not relational: its concurrent duplicate test does not prove PostgreSQL uniqueness, transaction or locking behavior. PostgreSQL correctness is implemented with a named database constraint and an atomic intermediary identity upsert, but this environment did not run PostgreSQL-backed tests.
+EF Core InMemory is not relational: its concurrent duplicate test does not prove PostgreSQL uniqueness, transaction or locking behavior. PostgreSQL enforces activity identity with a named database constraint and intermediary relationships with a foreign key, but this environment did not run PostgreSQL-backed tests.
 
 ## Troubleshooting
 

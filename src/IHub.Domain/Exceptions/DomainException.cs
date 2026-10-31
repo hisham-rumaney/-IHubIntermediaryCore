@@ -8,6 +8,10 @@ public sealed class InvalidActivityException(string message) : DomainException(m
 {
 }
 
+public sealed class IntermediaryNotFoundException(string intermediaryId) : DomainException($"Intermediary '{intermediaryId}' does not exist.")
+{
+}
+
 public sealed class DuplicateActivityConflictException(string activityId) : DomainException($"Activity '{activityId}' already exists with different payload data.")
 {
 }

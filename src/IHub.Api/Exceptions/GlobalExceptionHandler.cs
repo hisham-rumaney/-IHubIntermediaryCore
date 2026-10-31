@@ -18,6 +18,7 @@ public sealed class GlobalExceptionHandler(ILogger<GlobalExceptionHandler> logge
         {
             InvalidActivityException => (StatusCodes.Status400BadRequest, "Invalid activity"),
             InvalidStatementWindowException => (StatusCodes.Status400BadRequest, "Invalid statement window"),
+            IntermediaryNotFoundException => (StatusCodes.Status404NotFound, "Intermediary not found"),
             DuplicateActivityConflictException or ActivityIdentityConstraintException =>
                 (StatusCodes.Status409Conflict, "Activity conflict"),
             DomainException => (StatusCodes.Status400BadRequest, "Request failed"),
