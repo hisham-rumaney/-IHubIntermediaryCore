@@ -128,6 +128,9 @@ public sealed class HubActivityService(
             throw new InvalidActivityException("Intermediary ID is required.");
         }
 
+        start = start.ToUniversalTime();
+        end = end.ToUniversalTime();
+
         if (start >= end)
         {
             throw new InvalidStatementWindowException();

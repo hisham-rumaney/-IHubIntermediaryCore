@@ -37,6 +37,28 @@ public sealed class ActivityApiIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task NonUtcTimestamps_AreStoredAndReturnedInUtc()
+    {
+        var creation = await PostActivityAsync("PolicyAdmin", "ACT-OFFSET", "BROKER-UTC", "2026-10-15T12:30:00+02:00", 75m);
+        Assert.Equal(HttpStatusCode.Created, creation.StatusCode);
+
+        var activity = (await creation.Content.ReadFromJsonAsync<ActivityResponse>())!;
+        Assert.Equal(TimeSpan.Zero, activity.OccurredAt.Offset);
+        Assert.Equal(DateTimeOffset.Parse("2026-10-15T10:30:00Z"), activity.OccurredAt);
+
+        var statement = await GetStatementAsync(
+            "BROKER-UTC",
+            "2026-10-01T02:00:00+02:00",
+            "2026-11-01T02:00:00+02:00");
+
+        Assert.Equal(TimeSpan.Zero, statement.Start.Offset);
+        Assert.Equal(TimeSpan.Zero, statement.End.Offset);
+        Assert.Equal(DateTimeOffset.Parse("2026-10-01T00:00:00Z"), statement.Start);
+        Assert.Equal(DateTimeOffset.Parse("2026-11-01T00:00:00Z"), statement.End);
+        Assert.Equal(75m, statement.GrossTotal);
+    }
+
+    [Fact]
     public async Task IdenticalDuplicate_ContributesOnce()
     {
         var first = await PostActivityAsync("PolicyAdmin", "ACT-DUP", "BROKER-2", "2026-10-20T09:00:00Z", 100m);
