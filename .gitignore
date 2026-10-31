@@ -1,0 +1,36 @@
+## Visual Studio
+.vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+## Build outputs
+[Bb]in/
+[Oo]bj/
+[Dd]ebug/
+[Rr]elease/
+[Aa]rtifacts/
+
+## Visual Studio generated files
+Generated\ Files/
+[Tt]est[Rr]esult*/
+[Bb]uild[Ll]og.*
+*.VisualState.xml
+
+## NuGet
+*.nupkg
+*.snupkg
+.nuget/
+packages/
+
+## Publish and deployment outputs
+publish/
+app.publish/
+
+## User-specific IDE files
+*.rsuser
+*.sln.ide
+
+## macOS
+.DS_Store
