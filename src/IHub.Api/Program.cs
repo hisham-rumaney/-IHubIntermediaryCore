@@ -6,9 +6,10 @@ using IHub.Services;
 using IHub.Services.Telemetry;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
-using OpenTelemetry.Logs;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Trace;
+using Serilog;
+using Serilog.Formatting.Json;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -17,10 +18,19 @@ builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 builder.Services.AddHealthChecks()
     .AddCheck<DatabaseHealthCheck>("database");
-builder.Logging.AddOpenTelemetry(options =>
+builder.Host.UseSerilog((context, configuration) =>
 {
-    options.IncludeFormattedMessage = true;
-    options.IncludeScopes = true;
+    configuration
+        .MinimumLevel.Information()
+        .Enrich.FromLogContext()
+        .WriteTo.Console(new JsonFormatter());
+
+    // Enable after an OpenTelemetry Collector is running and its OTLP endpoint is configured.
+    // var otlpEndpoint = context.Configuration["OTEL_EXPORTER_OTLP_ENDPOINT"];
+    // if (!string.IsNullOrWhiteSpace(otlpEndpoint))
+    // {
+    //     configuration.WriteTo.OpenTelemetry(options => options.Endpoint = otlpEndpoint);
+    // }
 });
 
 builder.Services.AddOpenTelemetry()
