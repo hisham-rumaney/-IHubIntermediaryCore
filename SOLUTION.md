@@ -98,57 +98,21 @@ Returns intermediary ID, currency, requested start/end, gross total and last-upd
 
 ## 7. Observability
 
-Serilog writes structured JSON console events for API and application logs, including request/trace ID, source, external activity ID, intermediary, outcome and request duration. The Serilog OTLP sink is included as commented configuration and is not active; enable it after an OpenTelemetry Collector and `OTEL_EXPORTER_OTLP_ENDPOINT` are configured. Logs do not include full financial payloads or credentials. ASP.NET Core exceptions are logged through Serilog; HTTP ProblemDetails for unexpected failures is generic.
+Serilog writes structured JSON logs for application events, exceptions, and completed requests (trace ID, method, path, status, and duration). Request bodies and financial payloads are excluded. The global exception handler returns sanitized ProblemDetails; the OTLP log sink is commented out.
 
-OpenTelemetry instruments ASP.NET Core request traces and metrics, custom `Meter` counters for accepted activities, identical duplicates, conflicting duplicates, failed ingestion and request errors, and an occurrence-to-ingestion delay histogram. `GET /metrics` exposes metrics through the Prometheus scrape exporter. A request-logging middleware emits `ILogger` events handled by Serilog for every completed HTTP response, including automatic model-validation errors, with trace ID, method, path, status code and duration; request/response bodies are deliberately excluded. The global exception handler logs exception details and returns sanitized ProblemDetails for unexpected failures. OTLP log forwarding is currently commented out; no OTLP trace exporter or CloudWatch integration is configured. The Prometheus exporter dependency is prerelease.
+OpenTelemetry collects ASP.NET Core request traces and metrics. Tracked metrics:
 
-`GET /health` is a custom combined check: an HTTP response establishes process liveness, while the registered database check verifies PostgreSQL connectivity. It returns `200` with a sanitized `healthy` status when connected and `503` with `unhealthy` otherwise; it does not expose database exception details.
+- `ihub.activities.accepted`: accepted activities.
+- `ihub.activities.duplicates`: identical duplicate submissions.
+- `ihub.activities.conflicts`: conflicting submissions.
+- `ihub.activities.ingestion.failures`: failed ingestion attempts.
+- `ihub.requests.errors`: HTTP requests handled with an error.
+- `ihub.activities.processing_delay`: occurrence-to-ingestion delay in milliseconds, clamped to zero for future-dated activities.
+- ASP.NET Core HTTP request metrics.
 
-## 8. Proposed AWS Alerts
+`GET /metrics` exposes metrics through Prometheus. OTLP trace export and CloudWatch are not configured; the Prometheus exporter is prerelease. `GET /health` reports PostgreSQL connectivity as sanitized `healthy` (200) or `unhealthy` (503).
 
-These are initial suggestions only and require tuning against production baselines:
-
-1. **Elevated ingestion/request errors:** alarm when the 5-minute error ratio exceeds 5% with at least 100 requests. Page the service owner, inspect structured logs by request ID and outcome, then check RDS connectivity, validation/conflict rates and the latest deployment. Do not retry permanent validation errors blindly.
-2. **Increasing processing delay / queue age:** in a queued design, alarm when SQS `ApproximateAgeOfOldestMessage` exceeds 5 minutes for 10 minutes; also watch ingestion delay percentiles once exported. Check Lambda throttles/concurrency, database connections, RDS CPU/IO, retry/DLQ volume and producer bursts. Scale consumers only within database connection capacity; pause or reduce intake if the database is saturated.
-
-## 9. Proposed AWS Architecture (Design Only)
-
-No AWS resources are provisioned by this repository. A possible high-volume design is:
-
-```text
-Product systems
-   | HTTPS or direct SQS publish
-   v
-ALB -> ECS/Fargate .NET API (statements and optional ingestion front door)
-                         |
-                         | enqueue accepted activity envelope
-                         v
-                    Amazon SQS (standard queue)
-                         |
-                         v
-              .NET AWS Lambda consumers
-                         |
-                         v
-                 RDS for PostgreSQL
-
-Secrets Manager / Parameter Store -> API and Lambda configuration
-CloudWatch Logs, metrics and alarms <- ALB, ECS, Lambda, SQS and RDS
-SQS redrive policy -> dead-letter queue (DLQ)
-```
-
-A standard SQS queue is a good fit when event ordering is not required: statements use event occurrence time, and the database identity makes retries idempotent. The queue absorbs bursts, separates upstream availability from database write capacity, buffers work during short RDS interruptions and lets Lambda concurrency be controlled independently. If strict per-key delivery ordering becomes a real requirement, evaluate FIFO queues and their throughput/deduplication trade-offs instead.
-
-Two deployment shapes are possible. Upstream systems may publish validated envelopes directly to SQS, or the API may enqueue and return `202 Accepted`. The current local `POST /activities` persists synchronously and returns `201`/`200`; an asynchronous enqueue contract would be a deliberate API change. Lambda consumers should call the same Application ingestion use case and Data persistence boundary rather than duplicate business rules.
-
-SQS and Lambda provide at-least-once delivery, not exactly-once processing. Delete a message only after the database commit. The `(SourceSystem, ExternalActivityId)` constraint remains the final idempotency guard when a Lambda succeeds in PostgreSQL but fails before deleting the message. Set the visibility timeout above the Lambda's maximum useful processing time, return partial batch failures so successful records are not needlessly retried, and bound Lambda reserved concurrency to the RDS connection budget (consider RDS Proxy if justified).
-
-Classify failures deliberately: transient database/network errors should be retried with bounded backoff; permanent payload/schema failures should be surfaced and moved to a DLQ rather than retried indefinitely. Configure a redrive policy after a small number of receives (for example, five), alarm on DLQ depth and oldest-message age, retain diagnostic metadata without logging secrets, and provide an operator-reviewed redrive path after correcting the underlying issue. Avoid automatically replaying a whole DLQ without checking whether the defect is fixed.
-
-Use RDS PostgreSQL in private subnets, an ALB for the API, ECS/Fargate for the synchronous API and statement path, and Lambda only for queued ingestion if the operating model benefits from it. Store credentials in Secrets Manager or Parameter Store, rotate them, and grant each workload least-privilege access. Use CloudWatch structured logs, metrics and alarms. Scale API tasks on request load and Lambda with queue depth while maintaining RDS headroom; queue age is a better signal of unmet ingestion demand than Lambda concurrency alone.
-
-For production schema changes, run one controlled migration task in the deployment pipeline before rolling out code that requires the new schema. Use additive/backward-compatible changes first, deploy consumers that tolerate old and new messages during rollout, then remove obsolete schema only after old tasks are gone. Keep a rollback plan for application versions; database rollback is not always safe after new data has been written, so prefer a forward-fix for destructive migrations.
-
-## 10. Trade-offs and Next Steps
+## 8. Trade-offs and Next Steps
 
 - `IHub.Data` intentionally follows the reference repository's layer naming; it owns the same persistence responsibilities commonly named Infrastructure.
 - Serilog writes structured JSON logs to the console. Its OTLP sink is included but not active; OpenTelemetry tracing is instrumented and metrics are exposed through Prometheus, while trace export and CloudWatch integration remain deployment work.
@@ -158,6 +122,98 @@ For production schema changes, run one controlled migration task in the deployme
 - Gridify is a possible future enhancement if clients later need controlled filtering, sorting or pagination. The current statement API intentionally supports only one intermediary and one time window.
 - A queued ingestion workflow with SQS and Lambda remains a proposal; it is not installed or implemented here.
 
-## 11. AI Assistance
+## 9. Proposed AWS Architecture and Alerts (Design Only)
+
+```mermaid
+%%{init: {"flowchart": {"nodeSpacing": 50, "rankSpacing": 70}, "themeVariables": {"fontSize": "18px"}}}%%
+flowchart TB
+    subgraph callers[Callers]
+        direction TB
+        products[Product systems<br/>HTTPS only; no SQS permissions]
+        statementClients[Statement clients<br/>HTTPS]
+    end
+
+    subgraph ingress[API Gateway ingress]
+        direction TB
+        gateway[API Gateway HTTP API]
+        vpcLink[VPC Link]
+        gateway --> vpcLink
+    end
+
+    subgraph vpc[VPC: private subnets]
+        direction TB
+        cloudMap[AWS Cloud Map service discovery]
+        subgraph services[Private application services]
+            direction TB
+            ingestion[Ingestion API<br/>ECS/Fargate]
+            statements[Statement API<br/>ECS/Fargate]
+            lambda[.NET Lambda consumers<br/>VPC-attached]
+        end
+        database[(RDS PostgreSQL)]
+    end
+
+    subgraph awsServices[AWS managed services]
+        direction TB
+        queue[(Amazon SQS)]
+        deadLetterQueue[(Dead-letter queue)]
+        secrets[Secrets Manager / Parameter Store]
+        cloudwatch[CloudWatch Logs, Metrics, Alarms]
+    end
+
+    subgraph permissions[Workload IAM roles]
+        direction TB
+        ingestionRole[Ingestion role: SQS send only]
+        lambdaRole[Lambda role: SQS consume/delete, DB write]
+        statementRole[Statement role: DB read only]
+    end
+
+    products -->|HTTPS| gateway
+    statementClients -->|HTTPS| gateway
+    vpcLink --> cloudMap
+    cloudMap --> ingestion
+    cloudMap --> statements
+    ingestion -->|SendMessageBatch| queue
+    queue -->|Event source batch| lambda
+    lambda -->|Write activities| database
+    statements -->|Read statements| database
+
+    ingestionRole -.-> queue
+    lambdaRole -.-> queue
+    lambdaRole -.-> database
+    statementRole -.-> database
+    secrets -. Configuration .-> ingestion
+    secrets -. Configuration .-> statements
+    secrets -. Configuration .-> lambda
+    queue -. Redrive .-> deadLetterQueue
+    gateway -.-> cloudwatch
+    ingestion -.-> cloudwatch
+    statements -.-> cloudwatch
+    lambda -.-> cloudwatch
+    queue -.-> cloudwatch
+    database -.-> cloudwatch
+```
+
+A standard SQS queue is a good fit when event ordering is not required: statements use event occurrence time, and the database identity makes retries idempotent. The queue absorbs bursts, separates upstream availability from database write capacity, buffers work during short RDS interruptions and lets Lambda concurrency be controlled independently. If strict per-key delivery ordering becomes a real requirement, evaluate FIFO queues and their throughput/deduplication trade-offs instead.
+
+Upstream systems call only the HTTPS Ingestion API; they do not publish to SQS directly. The separately deployed Statement API serves statement reads. The Ingestion API validates requests, enqueues activity messages, and returns `202 Accepted`; Lambda consumers use the same Application ingestion use case and Data persistence boundary rather than duplicating business rules. The current local API combines both routes and persists `POST /activities` synchronously with `201`/`200`, so this separation and asynchronous contract are future changes.
+
+A future `POST /activities/batch` could accept a bounded list of activities while preserving per-activity idempotency. The Ingestion API publishes each activity as an SQS message, using `SendMessageBatch` for up to 10 messages per call. Lambda's SQS event source mapping can deliver configurable batches; process records independently and report partial batch failures so only failed records retry. Tune batch size to RDS capacity. Bulk submission and Lambda batching are not implemented in the current API.
+
+SQS and Lambda provide at-least-once delivery, not exactly-once processing. Delete a message only after the database commit. The `(SourceSystem, ExternalActivityId)` constraint remains the final idempotency guard when a Lambda succeeds in PostgreSQL but fails before deleting the message. Set the visibility timeout above the Lambda's maximum useful processing time and bound Lambda reserved concurrency to the RDS connection budget (consider RDS Proxy if justified).
+
+Classify failures deliberately: transient database/network errors should be retried with bounded backoff; permanent payload/schema failures should be surfaced and moved to a DLQ rather than retried indefinitely. Configure a redrive policy after a small number of receives (for example, five), alarm on DLQ depth and oldest-message age, retain diagnostic metadata without logging secrets, and provide an operator-reviewed redrive path after correcting the underlying issue. Avoid automatically replaying a whole DLQ without checking whether the defect is fixed.
+
+Use RDS PostgreSQL in private subnets, API Gateway HTTP API with VPC Link and AWS Cloud Map private integrations to separate ECS/Fargate Ingestion and Statement APIs, and Lambda for queued ingestion. Keep the services private; API Gateway routes HTTPS requests to each service. Store credentials in Secrets Manager or Parameter Store, rotate them, and grant each workload least-privilege access. Only the Ingestion API role can send to SQS; upstream systems have HTTPS access only. Use CloudWatch Logs for centralized logs and CloudWatch Alarms on CloudWatch Metrics for alerting. Scale each API independently and limit Lambda concurrency to preserve RDS headroom; queue age is a better signal of unmet ingestion demand than Lambda concurrency alone.
+
+For production schema changes, run one controlled migration task in the deployment pipeline before rolling out code that requires the new schema. Use additive/backward-compatible changes first, deploy consumers that tolerate old and new messages during rollout, then remove obsolete schema only after old tasks are gone. Keep a rollback plan for application versions; database rollback is not always safe after new data has been written, so prefer a forward-fix for destructive migrations.
+
+### AWS Alerts
+
+These are initial suggestions and should be tuned to production baselines:
+
+1. **Elevated ingestion/request errors:** alarm when the 5-minute error ratio exceeds 5% with at least 100 requests. Inspect logs by request ID and outcome; check RDS connectivity, validation/conflict rates and recent deployments.
+2. **Queue age / processing delay:** in a queued design, alarm when SQS `ApproximateAgeOfOldestMessage` exceeds 5 minutes for 10 minutes. Check Lambda throttles, database capacity, retries and DLQ volume; scale consumers only within the RDS connection budget.
+
+## 10. AI Assistance
 
 GitHub Copilot was used to assist with repository analysis, implementation, integration-test changes and documentation drafting. The recorded build and test claims in these files refer to commands run locally; no AWS deployment, PostgreSQL-backed concurrency test or external review is claimed.
