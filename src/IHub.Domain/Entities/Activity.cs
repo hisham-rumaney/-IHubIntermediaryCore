@@ -22,7 +22,7 @@ public sealed class Activity
     public decimal Amount { get; set; }
 
     [Required]
-    public string Currency { get; set; } = string.Empty;
+    public string Currency { get; set; } = CurrencyZar;
 
     public DateTimeOffset IngestedAt { get; set; }
 }

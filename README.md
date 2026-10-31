@@ -148,17 +148,16 @@ Example response:
   "currency": "ZAR",
   "start": "2026-10-01T00:00:00+00:00",
   "end": "2026-11-01T00:00:00+00:00",
-  "grossTotal": 1250.50,
-  "lastUpdated": "2026-10-30T12:00:00+00:00"
+  "grossTotal": 1250.50
 }
 ```
 
-The requested window is half-open: start inclusive, end exclusive. Only `OccurredAt` is used for inclusion, so a late-arriving activity is included in its historical statement. `LastUpdated` is the latest `IngestedAt` among matching activities, or `null` when the window is empty. Empty totals are `0`. Currency is always reported as `ZAR`; no currency selection or conversion is performed.
+The requested window is half-open: start inclusive, end exclusive. Only `OccurredAt` is used for inclusion, so a late-arriving activity is included in its historical statement. Empty totals are `0`. Currency is always reported as `ZAR`; no currency selection or conversion is performed.
 
 ## Operational Endpoints
 
 - `GET /health`: combined process/database health. Returns `200` with `healthy` when PostgreSQL is reachable and `503` with `unhealthy` otherwise.
-OpenTelemetry instruments ASP.NET Core request traces, request metrics and activity outcome metrics. Serilog handles the application's `ILogger` events and writes structured JSON to the console. The Serilog OTLP sink is included but commented out until an OpenTelemetry Collector is available and `OTEL_EXPORTER_OTLP_ENDPOINT` is configured. `GET /metrics` exposes metrics through the Prometheus scrape exporter. A request-completion event records trace ID, method, path, status and duration, including automatic validation responses; request and response bodies are not logged. The delay is clamped at zero for future-dated activities; historical late arrivals increase it. CloudWatch log shipping and trace export are not configured here.
+OpenTelemetry instruments ASP.NET Core request traces and HTTP metrics, plus activity-specific accepted and duplicate metrics. Monitor HTTP request volume, latency and status codes through the built-in HTTP metrics; there are no separate application-level HTTP-error, conflict or ingestion-failure counters. Serilog handles the application's `ILogger` events and writes structured JSON to the console. The Serilog OTLP sink is included but commented out until an OpenTelemetry Collector is available and `OTEL_EXPORTER_OTLP_ENDPOINT` is configured. `GET /metrics` exposes metrics through the Prometheus scrape exporter. A request-completion event records trace ID, method, path, status and duration, including automatic validation responses; request and response bodies are not logged. CloudWatch log shipping and trace export are not configured here.
 
 ## Integration Tests
 

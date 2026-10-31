@@ -30,4 +30,5 @@ public sealed class RequestLoggingMiddleware(RequestDelegate next, ILogger<Reque
                 stopwatch.Elapsed.TotalMilliseconds);
         }
     }
+
 }

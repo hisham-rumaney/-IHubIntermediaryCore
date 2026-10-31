@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using IHub.Domain.Exceptions;
-using IHub.Services.Telemetry;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
 
@@ -10,7 +9,6 @@ public sealed class GlobalExceptionHandler(ILogger<GlobalExceptionHandler> logge
 {
     public async ValueTask<bool> TryHandleAsync(HttpContext httpContext, Exception exception, CancellationToken cancellationToken)
     {
-        ActivityMetrics.RecordRequestError();
         var traceId = Activity.Current?.TraceId.ToString() ?? httpContext.TraceIdentifier;
         logger.LogError(exception, "Unhandled request exception for {Path} TraceId={TraceId}", httpContext.Request.Path, traceId);
 

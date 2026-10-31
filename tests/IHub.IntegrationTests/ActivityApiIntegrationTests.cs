@@ -50,7 +50,6 @@ public sealed class ActivityApiIntegrationTests : IAsyncLifetime
         var statement = await GetStatementAsync("BROKER-1", "2026-10-01T00:00:00Z", "2026-11-01T00:00:00Z");
         Assert.Equal(1250.50m, statement.GrossTotal);
         Assert.Equal("ZAR", statement.Currency);
-        Assert.NotNull(statement.LastUpdated);
     }
 
     [Fact]
@@ -153,22 +152,43 @@ public sealed class ActivityApiIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task EmptyStatement_ReturnsZeroAndNullLastUpdated()
+    public async Task EmptyStatement_ReturnsZero()
     {
         var statement = await GetStatementAsync("BROKER-EMPTY", "2026-10-01T00:00:00Z", "2026-11-01T00:00:00Z");
 
         Assert.Equal(0m, statement.GrossTotal);
-        Assert.Null(statement.LastUpdated);
     }
 
     [Fact]
     public async Task InvalidActivityAndWindow_AreRejectedWithoutChangingTotals()
     {
         var invalidActivity = await PostActivityAsync("PolicyAdmin", "ACT-INVALID", "BROKER-8", "2026-10-15T10:00:00Z", -1m);
+        var invalidAmountPrecision = await _client.PostAsJsonAsync("/activities", new CreateActivityRequest
+        {
+            SourceSystem = "PolicyAdmin",
+            ExternalActivityId = "ACT-INVALID-PRECISION",
+            IntermediaryId = "BROKER-8",
+            OccurredAt = DateTimeOffset.Parse("2026-10-15T10:00:00Z"),
+            Amount = 1.001m
+        });
+        var missingOccurredAt = await _client.PostAsJsonAsync("/activities", new CreateActivityRequest
+        {
+            SourceSystem = "PolicyAdmin",
+            ExternalActivityId = "ACT-INVALID-OCCURRED-AT",
+            IntermediaryId = "BROKER-8",
+            Amount = 1m
+        });
         var invalidWindow = await _client.GetAsync("/intermediaries/BROKER-8/statement?start=2026-10-10T00:00:00Z&end=2026-10-10T00:00:00Z");
 
         await AssertProblemDetailsAsync(invalidActivity, HttpStatusCode.BadRequest);
+        await AssertProblemDetailsAsync(invalidAmountPrecision, HttpStatusCode.BadRequest);
+        await AssertProblemDetailsAsync(missingOccurredAt, HttpStatusCode.BadRequest);
         await AssertProblemDetailsAsync(invalidWindow, HttpStatusCode.BadRequest);
+        using (var invalidWindowProblem = JsonDocument.Parse(await invalidWindow.Content.ReadAsStringAsync()))
+        {
+            Assert.Equal("Invalid statement window", invalidWindowProblem.RootElement.GetProperty("title").GetString());
+        }
+
         var statement = await GetStatementAsync("BROKER-8", "2026-10-01T00:00:00Z", "2026-11-01T00:00:00Z");
         Assert.Equal(0m, statement.GrossTotal);
     }

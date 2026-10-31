@@ -75,7 +75,7 @@ Statement membership uses `OccurredAt`, never arrival order or `IngestedAt`. A l
 
 ### Statement Query
 
-The statement repository filters by intermediary and the half-open occurrence-time interval `[start, end)`. It computes `GrossTotal` with a database `SUM` and `LastUpdated` with `MAX(IngestedAt)` over the same matches, without materializing activities. Empty totals are zero and `LastUpdated` is null.
+`ActivityRepository` filters by intermediary and the half-open occurrence-time interval `[start, end)`, then computes `GrossTotal` with a database `SUM` without materializing activities. Empty totals are zero.
 
 ## 6. API Contracts
 
@@ -94,21 +94,18 @@ Request fields: `sourceSystem`, `externalActivityId`, `intermediaryId`, `occurre
 
 ### `GET /intermediaries/{intermediaryId}/statement?start=...&end=...`
 
-Returns intermediary ID, currency, requested start/end, gross total and last-updated timestamp. Start must be less than end. Statement membership uses the half-open occurrence-time interval documented above.
+Returns intermediary ID, currency, requested start/end and gross total. Start must be less than end. Statement membership uses the half-open occurrence-time interval documented above.
 
 ## 7. Observability
 
 Serilog writes structured JSON logs for application events, exceptions, and completed requests (trace ID, method, path, status, and duration). Request bodies and financial payloads are excluded. The global exception handler returns sanitized ProblemDetails; the OTLP log sink is commented out.
 
-OpenTelemetry collects ASP.NET Core request traces and metrics. Tracked metrics:
+OpenTelemetry collects ASP.NET Core request traces and HTTP request metrics. Monitor request volume, duration/latency and response status codes (especially `4xx` and `5xx`) using the built-in HTTP metrics and their method/route/status dimensions. No separate application-level HTTP-error, conflict or ingestion-failure counters are emitted.
 
-- `ihub.activities.accepted`: accepted activities.
-- `ihub.activities.duplicates`: identical duplicate submissions.
-- `ihub.activities.conflicts`: conflicting submissions.
-- `ihub.activities.ingestion.failures`: failed ingestion attempts.
-- `ihub.requests.errors`: HTTP requests handled with an error.
-- `ihub.activities.processing_delay`: occurrence-to-ingestion delay in milliseconds, clamped to zero for future-dated activities.
-- ASP.NET Core HTTP request metrics.
+Application-specific metrics:
+
+- `ihub.activities.accepted`: accepted activities; monitor ingestion throughput.
+- `ihub.activities.duplicates`: identical duplicate submissions; use alongside accepted counts to understand retry volume.
 
 `GET /metrics` exposes metrics through Prometheus. OTLP trace export and CloudWatch are not configured; the Prometheus exporter is prerelease. `GET /health` reports PostgreSQL connectivity as sanitized `healthy` (200) or `unhealthy` (503).
 

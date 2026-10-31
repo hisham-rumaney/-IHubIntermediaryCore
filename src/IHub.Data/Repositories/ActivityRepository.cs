@@ -12,7 +12,10 @@ public sealed class ActivityRepository(IHubDbContext dbContext) : IActivityRepos
         await dbContext.Activities.AddAsync(activity, cancellationToken);
     }
 
-    public async Task<Activity?> GetByExternalIdentityAsync(string sourceSystem, string externalActivityId, CancellationToken cancellationToken = default)
+    public async Task<Activity?> GetByExternalIdentityAsync(
+        string sourceSystem,
+        string externalActivityId,
+        CancellationToken cancellationToken = default)
     {
         return await dbContext.Activities
             .AsNoTracking()
@@ -26,5 +29,15 @@ public sealed class ActivityRepository(IHubDbContext dbContext) : IActivityRepos
             .Where(x => x.IntermediaryId == intermediaryId)
             .OrderBy(x => x.OccurredAt)
             .ToListAsync(cancellationToken);
+    }
+
+    public async Task<decimal> GetGrossTotalAsync(string intermediaryId, DateTimeOffset start, DateTimeOffset end, CancellationToken cancellationToken = default)
+    {
+        return await dbContext.Activities
+            .AsNoTracking()
+            .Where(x => x.IntermediaryId == intermediaryId
+                && x.OccurredAt >= start
+                && x.OccurredAt < end)
+            .SumAsync(x => x.Amount, cancellationToken);
     }
 }

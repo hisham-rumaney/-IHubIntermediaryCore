@@ -7,5 +7,4 @@ public sealed class StatementResponse
     public DateTimeOffset Start { get; init; }
     public DateTimeOffset End { get; init; }
     public decimal GrossTotal { get; init; }
-    public DateTimeOffset? LastUpdated { get; init; }
 }

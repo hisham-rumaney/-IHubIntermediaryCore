@@ -32,7 +32,6 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddScoped<IActivityRepository, ActivityRepository>();
         services.AddScoped<IIntermediaryRepository, IntermediaryRepository>();
-        services.AddScoped<IStatementRepository, StatementRepository>();
         return services;
     }
 
