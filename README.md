@@ -148,7 +148,7 @@ Responses:
 
 - `201 Created`: new activity persisted.
 - `200 OK`: identical submission for the same `(sourceSystem, externalActivityId)`.
-- `409 Conflict`: conflicting payload for that identity.
+- `409 Conflict`: the same `(sourceSystem, externalActivityId)` was already submitted, but with a different `intermediaryId`, `occurredAt` or `amount`. The original activity is left unchanged.
 - `404 Not Found`: the intermediary does not exist; no activity is ingested.
 - `400 Bad Request`: invalid activity.
 
