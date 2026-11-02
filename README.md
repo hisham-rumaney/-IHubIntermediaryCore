@@ -20,7 +20,7 @@ tests/
 
 ## Prerequisites
 
-- .NET 9 SDK. The API and integration tests target `net9.0`; the Domain, Application, Services and Data libraries target `net8.0`.
+- .NET 9 SDK. All projects target `net9.0`.
 - PostgreSQL 14 or newer for running the API
 - `dotnet-ef` 9.x for migration commands
 
@@ -28,7 +28,7 @@ The automated integration tests do not require PostgreSQL or Docker.
 
 ### Install the .NET 9 SDK
 
-Check your installed SDKs with `dotnet --list-sdks`; a `9.x` entry means you are ready. The .NET 9 SDK can also build the `net8.0` libraries, so you do not need a separate .NET 8 SDK.
+Check your installed SDKs with `dotnet --list-sdks`; a `9.x` entry means you are ready. No other SDK is needed.
 
 - **macOS (Homebrew):** `brew install --cask dotnet-sdk@9`
 - **macOS, Windows or Linux (installer):** download the .NET 9 SDK from <https://dotnet.microsoft.com/download/dotnet/9.0> and run it.
