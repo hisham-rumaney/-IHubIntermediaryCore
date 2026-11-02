@@ -28,11 +28,11 @@ public sealed class HubActivityService(
         var sourceSystem = request.SourceSystem.Trim().ToUpperInvariant();
         var intermediaryId = request.IntermediaryId.Trim();
         var occurredAt = request.OccurredAt.ToUniversalTime();
-        var duplicateResponse = await GetDuplicateResponseAsync(
+        var raceDuplicateResponse = await GetDuplicateResponseAsync(
             sourceSystem, request.ExternalActivityId, intermediaryId, occurredAt, request.Amount, cancellationToken);
-        if (duplicateResponse is not null)
+        if (raceDuplicateResponse is not null)
         {
-            return (false, duplicateResponse);
+            return (false, raceDuplicateResponse);
         }
 
         if (!await intermediaryRepository.ExistsAsync(intermediaryId, cancellationToken))
@@ -51,7 +51,8 @@ public sealed class HubActivityService(
         }
         catch (ActivityIdentityConstraintException)
         {
-            duplicateResponse = await GetDuplicateResponseAsync(
+            // Another request may have inserted this activity after the initial lookup.
+            var duplicateResponse = await GetDuplicateResponseAsync(
                 sourceSystem, request.ExternalActivityId, intermediaryId, occurredAt, request.Amount, cancellationToken);
             if (duplicateResponse is not null)
             {
@@ -60,7 +61,6 @@ public sealed class HubActivityService(
 
             throw;
         }
-        ActivityMetrics.RecordAccepted();
         ActivityMetrics.RecordAccepted();
         logger.LogInformation("Activity accepted. SourceSystem={SourceSystem} ExternalActivityId={ExternalActivityId} IntermediaryId={IntermediaryId} Outcome={Outcome}",
             sourceSystem, activity.ExternalActivityId, intermediaryId, "accepted");
