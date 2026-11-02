@@ -22,15 +22,6 @@ public sealed class ActivityRepository(IHubDbContext dbContext) : IActivityRepos
             .FirstOrDefaultAsync(x => x.SourceSystem == sourceSystem && x.ExternalActivityId == externalActivityId, cancellationToken);
     }
 
-    public async Task<IReadOnlyList<Activity>> GetByIntermediaryAsync(string intermediaryId, CancellationToken cancellationToken = default)
-    {
-        return await dbContext.Activities
-            .AsNoTracking()
-            .Where(x => x.IntermediaryId == intermediaryId)
-            .OrderBy(x => x.OccurredAt)
-            .ToListAsync(cancellationToken);
-    }
-
     public async Task<decimal> GetGrossTotalAsync(string intermediaryId, DateTimeOffset start, DateTimeOffset end, CancellationToken cancellationToken = default)
     {
         return await dbContext.Activities

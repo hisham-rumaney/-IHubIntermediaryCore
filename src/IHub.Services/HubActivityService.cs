@@ -20,11 +20,6 @@ public sealed class HubActivityService(
 
     public async Task<(bool IsCreated, ActivityResponse Response)> SubmitActivityAsync(CreateActivityRequest request, CancellationToken cancellationToken = default)
     {
-        return await SubmitActivityCoreAsync(request, cancellationToken);
-    }
-
-    private async Task<(bool IsCreated, ActivityResponse Response)> SubmitActivityCoreAsync(CreateActivityRequest request, CancellationToken cancellationToken)
-    {
         var sourceSystem = request.SourceSystem.Trim().ToUpperInvariant();
         var intermediaryId = request.IntermediaryId.Trim();
         var occurredAt = request.OccurredAt.ToUniversalTime();
