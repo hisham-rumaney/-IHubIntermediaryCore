@@ -96,6 +96,10 @@ Request fields: `sourceSystem`, `externalActivityId`, `intermediaryId`, `occurre
 
 Returns intermediary ID, currency, requested start/end and gross total. Start must be less than end. Statement membership uses the half-open occurrence-time interval documented above.
 
+### OpenAPI documentation
+
+The API uses the built-in `Microsoft.AspNetCore.OpenApi` generator (`AddOpenApi`/`MapOpenApi`) rather than Swashbuckle, with the Scalar UI (`Scalar.AspNetCore`) at `/scalar/v1`. The document is served at `/openapi/v1.json`. Both are mapped only in the `Development` environment. Controller actions declare their response types and status codes with `ProducesResponseType`, so the success and ProblemDetails responses appear in the document. The generator requires .NET 9, so `IHub.Api` and `IHub.IntegrationTests` target `net9.0` while the library projects remain on `net8.0`.
+
 ## 7. Observability
 
 Serilog writes structured JSON logs for application events, exceptions, and completed requests (trace ID, method, path, status, and duration). Request bodies and financial payloads are excluded. The global exception handler returns sanitized ProblemDetails; the OTLP log sink is commented out.

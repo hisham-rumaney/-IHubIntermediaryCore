@@ -1,3 +1,4 @@
+using IHub.Application.DTOs;
 using IHub.Api.Exceptions;
 using IHub.Api.Health;
 using IHub.Api.Middleware;
@@ -6,8 +7,10 @@ using IHub.Services;
 using IHub.Services.Telemetry;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
+using Microsoft.OpenApi.Any;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Trace;
+using Scalar.AspNetCore;
 using Serilog;
 using Serilog.Formatting.Json;
 
@@ -15,6 +18,40 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers();
 builder.Services.AddProblemDetails();
+builder.Services.AddOpenApi(options =>
+{
+    options.AddSchemaTransformer((schema, context, _) =>
+    {
+        if (context.JsonTypeInfo.Type == typeof(CreateActivityRequest))
+        {
+            schema.Example = new OpenApiObject
+            {
+                ["sourceSystem"] = new OpenApiString("BROKER_SYS"),
+                ["externalActivityId"] = new OpenApiString("EXT-1001"),
+                ["intermediaryId"] = new OpenApiString("BROKER-123"),
+                ["occurredAt"] = new OpenApiString("2026-10-15T10:00:00Z"),
+                ["amount"] = new OpenApiDouble(1500.50)
+            };
+        }
+
+        return Task.CompletedTask;
+    });
+    options.AddOperationTransformer((operation, _, _) =>
+    {
+        foreach (var parameter in operation.Parameters ?? [])
+        {
+            parameter.Example = parameter.Name switch
+            {
+                "intermediaryId" => new OpenApiString("BROKER-123"),
+                "start" => new OpenApiString("2026-10-01T00:00:00Z"),
+                "end" => new OpenApiString("2026-11-01T00:00:00Z"),
+                _ => parameter.Example
+            };
+        }
+
+        return Task.CompletedTask;
+    });
+});
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 builder.Services.AddHealthChecks()
     .AddCheck<DatabaseHealthCheck>("database");
@@ -54,6 +91,12 @@ builder.Services.AddServicesLayer();
 var app = builder.Build();
 
 await app.Services.InitializeDatabaseAsync();
+
+if (app.Environment.IsDevelopment())
+{
+    app.MapOpenApi();
+    app.MapScalarApiReference();
+}
 
 app.UseMiddleware<RequestLoggingMiddleware>();
 app.UseExceptionHandler();
