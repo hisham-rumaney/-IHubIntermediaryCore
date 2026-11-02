@@ -42,7 +42,7 @@ HTTP integration tests use xUnit, `WebApplicationFactory` and EF Core InMemory. 
 
 - `IActivityRepository` persists activities and finds the external identity `(SourceSystem, ExternalActivityId)`.
 - `IIntermediaryRepository` checks whether the intermediary identity already exists.
-- `IStatementRepository` executes the aggregate and latest-ingestion queries for a requested intermediary and window.
+- `IActivityRepository` executes the gross-total aggregate query for a requested intermediary and time window.
 - `IUnitOfWork` provides asynchronous `SaveChangesAsync`; the Data implementation translates only a violation of the named activity identity constraint into an application-level domain exception.
 
 An activity is persisted only after its intermediary is confirmed to exist. Intermediary records are managed outside this API; an unknown ID is rejected and no intermediary or activity row is created.
@@ -112,7 +112,7 @@ Application-specific metrics:
 ## 8. Trade-offs and Next Steps
 
 - `IHub.Data` intentionally follows the reference repository's layer naming; it owns the same persistence responsibilities commonly named Infrastructure.
-- Serilog writes structured JSON logs to the console. Its OTLP sink is included but not active; OpenTelemetry tracing is instrumented and metrics are exposed through Prometheus, while trace export and CloudWatch integration remain deployment work.
+- Serilog writes structured JSON logs to the console. Commented OTLP configuration shows how logs and metrics can be sent to an OpenTelemetry Collector; enabling metrics export requires the commented OTLP exporter package reference in `IHub.Api.csproj`. CloudWatch delivery remains a Collector deployment concern: configure its AWS credentials/permissions and pipelines to export logs to CloudWatch Logs and metrics to CloudWatch. Metrics are also exposed through Prometheus. Traces are instrumented but not exported.
 - The current `IUnitOfWork` persists through EF `SaveChangesAsync`; intermediary records are managed outside this API and are only checked during ingestion.
 - The single initial migration is suitable for a fresh local database. Production schema evolution should use reviewed incremental EF migrations and apply them as a single deployment task before rolling out dependent code.
 - Add PostgreSQL-backed integration tests and query-plan inspection when a disposable or managed PostgreSQL environment is available.

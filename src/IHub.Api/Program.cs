@@ -25,7 +25,8 @@ builder.Host.UseSerilog((context, configuration) =>
         .Enrich.FromLogContext()
         .WriteTo.Console(new JsonFormatter());
 
-    // Enable after an OpenTelemetry Collector is running and its OTLP endpoint is configured.
+    // Enable after an OpenTelemetry Collector is running and configured to export logs to CloudWatch Logs.
+    // Set OTEL_EXPORTER_OTLP_ENDPOINT to the Collector's OTLP gRPC endpoint (for example, http://localhost:4317).
     // var otlpEndpoint = context.Configuration["OTEL_EXPORTER_OTLP_ENDPOINT"];
     // if (!string.IsNullOrWhiteSpace(otlpEndpoint))
     // {
@@ -35,10 +36,17 @@ builder.Host.UseSerilog((context, configuration) =>
 
 builder.Services.AddOpenTelemetry()
     .WithTracing(tracing => tracing.AddAspNetCoreInstrumentation())
-    .WithMetrics(metrics => metrics
-        .AddMeter(ActivityMetrics.MeterName)
-        .AddAspNetCoreInstrumentation()
-        .AddPrometheusExporter());
+    .WithMetrics(metrics =>
+    {
+        metrics
+            .AddMeter(ActivityMetrics.MeterName)
+            .AddAspNetCoreInstrumentation()
+            .AddPrometheusExporter();
+
+        // Uncomment after adding OpenTelemetry.Exporter.OpenTelemetryProtocol (see IHub.Api.csproj).
+        // The Collector must be configured to export received metrics to CloudWatch.
+        // metrics.AddOtlpExporter();
+    });
 
 builder.Services.AddDataLayer(builder.Configuration);
 builder.Services.AddServicesLayer();
