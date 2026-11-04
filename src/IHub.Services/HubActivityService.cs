@@ -1,8 +1,8 @@
 using IHub.Application.DTOs;
-using IHub.Application.Interfaces.Persistence;
 using IHub.Application.Interfaces.Repositories;
 using IHub.Application.Interfaces.Services;
 using IHub.Application.Mappers;
+using IHub.Data.Persistence;
 using IHub.Domain.Exceptions;
 using IHub.Services.Telemetry;
 using Microsoft.Extensions.Logging;

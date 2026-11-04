@@ -8,6 +8,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\IHub.Application\IHub.Application.csproj" />
+    <ProjectReference Include="..\IHub.Data\IHub.Data.csproj" />
     <ProjectReference Include="..\IHub.Domain\IHub.Domain.csproj" />
   </ItemGroup>
 

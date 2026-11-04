@@ -1,4 +1,3 @@
-using IHub.Application.Interfaces.Persistence;
 using IHub.Data.Persistence;
 using IHub.Domain.Exceptions;
 using Microsoft.EntityFrameworkCore;
@@ -8,11 +7,13 @@ namespace IHub.Data.Repositories;
 
 public sealed class UnitOfWork(IHubDbContext dbContext) : IUnitOfWork
 {
+    public IHubDbContext Context { get; } = dbContext;
+
     public async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
         try
         {
-            return await dbContext.SaveChangesAsync(cancellationToken);
+            return await Context.SaveChangesAsync(cancellationToken);
         }
         catch (DbUpdateException exception) when (FindPostgresException(exception) is { SqlState: PostgresErrorCodes.UniqueViolation, ConstraintName: "UQ_Activities_SourceSystem_ExternalActivityId" })
         {

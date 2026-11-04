@@ -13,20 +13,20 @@ This repository implements a small activity-ingestion and statement API for Sanl
 
 ## 3. Clean Architecture
 
-The solution follows Clean Architecture with dependencies pointing inward: API and Data depend on Application, while Application depends on Domain. Layer names mirror the TopScorers reference; persistence is named `IHub.Data` rather than introducing a separate Infrastructure project.
+The solution follows the TopScorers reference layering: Services depends on Application and Data, while Data depends on Application and Domain. Persistence is named `IHub.Data` rather than introducing a separate Infrastructure project.
 
 ```text
-IHub.Api -> IHub.Services -> IHub.Application -> IHub.Domain
-     |                         ^
-     +-> IHub.Data ------------+
+IHub.Api -> IHub.Services -> IHub.Application
+     |          |                    |
+     +-> IHub.Data ------------------+-> IHub.Domain
 
 IHub.IntegrationTests -> IHub.Api (real HTTP host; InMemory EF context)
 ```
 
 - **Domain:** Activity and Intermediary identity entities plus domain exceptions. It has no ASP.NET Core or EF Core dependency.
-- **Application:** Request/response DTOs, `IHubActivityService` contract, repository interfaces and `IUnitOfWork`.
+- **Application:** Request/response DTOs, `IHubActivityService` contract and repository interfaces.
 - **Services:** `HubActivityService` implements the Application contract and owns validation, idempotency, business logging and activity outcome instrumentation.
-- **Data:** `IHubDbContext`, PostgreSQL mappings, repositories, conflict translation and migrations. This is the persistence implementation boundary.
+- **Data:** `IHubDbContext`, `IUnitOfWork`, PostgreSQL mappings, repositories, conflict translation and migrations. Repositories access the same context through the scoped unit of work.
 - **API:** Controllers, `GlobalExceptionHandler`, startup composition, health and OpenTelemetry instrumentation.
 - **Integration tests:** xUnit and `WebApplicationFactory` exercise the HTTP application with EF Core InMemory and no repository/service mocks.
 
@@ -43,7 +43,7 @@ HTTP integration tests use xUnit, `WebApplicationFactory` and EF Core InMemory. 
 - `IActivityRepository` persists activities and finds the external identity `(SourceSystem, ExternalActivityId)`.
 - `IIntermediaryRepository` checks whether the intermediary identity already exists.
 - `IActivityRepository` executes the gross-total aggregate query for a requested intermediary and time window.
-- `IUnitOfWork` provides asynchronous `SaveChangesAsync`; the Data implementation translates only a violation of the named activity identity constraint into an application-level domain exception.
+- `IUnitOfWork` exposes the scoped `IHubDbContext` to repositories and provides asynchronous `SaveChangesAsync`; its implementation translates only a violation of the named activity identity constraint into an application-level domain exception.
 
 An activity is persisted only after its intermediary is confirmed to exist. Intermediary records are managed outside this API; an unknown ID is rejected and no intermediary or activity row is created.
 

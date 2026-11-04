@@ -5,11 +5,11 @@ using Microsoft.EntityFrameworkCore;
 
 namespace IHub.Data.Repositories;
 
-public sealed class ActivityRepository(IHubDbContext dbContext) : IActivityRepository
+public sealed class ActivityRepository(IUnitOfWork unitOfWork) : IActivityRepository
 {
     public async Task AddAsync(Activity activity, CancellationToken cancellationToken = default)
     {
-        await dbContext.Activities.AddAsync(activity, cancellationToken);
+        await unitOfWork.Context.Activities.AddAsync(activity, cancellationToken);
     }
 
     public async Task<Activity?> GetByExternalIdentityAsync(
@@ -17,14 +17,14 @@ public sealed class ActivityRepository(IHubDbContext dbContext) : IActivityRepos
         string externalActivityId,
         CancellationToken cancellationToken = default)
     {
-        return await dbContext.Activities
+        return await unitOfWork.Context.Activities
             .AsNoTracking()
             .FirstOrDefaultAsync(x => x.SourceSystem == sourceSystem && x.ExternalActivityId == externalActivityId, cancellationToken);
     }
 
     public async Task<decimal> GetGrossTotalAsync(string intermediaryId, DateTimeOffset start, DateTimeOffset end, CancellationToken cancellationToken = default)
     {
-        return await dbContext.Activities
+        return await unitOfWork.Context.Activities
             .AsNoTracking()
             .Where(x => x.IntermediaryId == intermediaryId
                 && x.OccurredAt >= start
